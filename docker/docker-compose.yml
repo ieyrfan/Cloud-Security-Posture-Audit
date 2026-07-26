@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  security-scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: security-posture-scanner
+    volumes:
+      - ./reports:/app/reports
+      - ./terraform:/app/terraform
+      - ~/.aws:/root/.aws
+      - ~/.azure:/root/.azure
+    environment:
+      - AWS_REGION=us-east-1
+      - AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}
+      - SCAN_OUTPUT_DIR=/app/reports
+      - BENCHMARK_VERSION=v1.5.0
+    command: >
+      sh -c "
+        python scripts/security-scan.py --mode full --format json,md,html
+        && python scripts/compliance-check.py --benchmark cis
+        && python scripts/generate-report.py
+      "
+    networks:
+      - security-network
+
+  terraform-validator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: terraform-validator
+    volumes:
+      - ./terraform:/app/terraform
+      - ~/.aws:/root/.aws
+    entrypoint: ["checkov"]
+    command:
+      - "-d"
+      - "/app/terraform"
+      - "--framework"
+      - "terraform"
+      - "--output"
+      - "json"
+      - "--soft-fail"
+      - "on"
+    networks:
+      - security-network
+
+  report-viewer:
+    image: python:3.11-slim
+    container_name: report-viewer
+    volumes:
+      - ./reports:/app/reports
+      - ./scripts:/app/scripts
+    ports:
+      - "8080:8080"
+    command: >
+      sh -c "
+        pip install http-server
+        cd /app/reports
+        python -m http.server 8080
+      "
+    networks:
+      - security-network
+
+networks:
+  security-network:
+    driver: bridge
+
+volumes:
+  terraform-data:
+  security-reports:

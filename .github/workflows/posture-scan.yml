@@ -1,0 +1,223 @@
+name: Cloud Security Posture Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    - cron: '0 2 * * *'   # Daily at 2 AM UTC
+
+env:
+  AWS_REGION: us-east-1
+  BENCHMARK_VERSION: v1.5.0
+  SCAN_OUTPUT_DIR: ./reports
+
+jobs:
+  terraform-validate:
+    name: Terraform Security Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+
+      - name: Initialize Terraform
+        run: |
+          cd terraform
+          terraform init -backend=false
+
+      - name: Validate Terraform
+        run: |
+          cd terraform
+          terraform validate
+
+      - name: Security Scan with Checkov
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          framework: terraform
+          output_format: cli
+          soft_fail: true
+
+      - name: Upload Scan Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: checkov-results
+          path: terraform/checkov_results/
+
+  security-scan:
+    name: Security Posture Scan
+    runs-on: ubuntu-latest
+    needs: terraform-validate
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run Security Posture Scan
+        run: |
+          mkdir -p ${{ env.SCAN_OUTPUT_DIR }}
+          python scripts/security-scan.py \
+            --environment ${{ github.ref_name }} \
+            --format json,md,html
+
+      - name: Run CIS Compliance Check
+        run: |
+          python scripts/compliance-check.py \
+            --benchmark cis \
+            --environment ${{ github.ref_name }}
+
+      - name: Generate Consolidated Report
+        run: |
+          python scripts/generate-report.py \
+            --environment ${{ github.ref_name }} \
+            --format json,md,html
+
+      - name: Upload Scan Reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: security-reports-${{ github.run_number }}
+          path: |
+            reports/
+            !reports/*.png
+          retention-days: 30
+
+      - name: Upload Report as GitHub Pages
+        uses: actions/upload-pages-artifact@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: reports/
+
+  publish-report:
+    name: Publish Report
+    needs: security-scan
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs: [ terraform-validate, security-scan ]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Scan Results
+        uses: actions/download-artifact@v3
+        with:
+          name: security-reports-${{ github.run_number }}
+          path: reports/
+
+      - name: Check Critical Findings
+        run: |
+          CRITICAL_COUNT=$(jq '[.findings[] | select(.status == "FAIL" and .severity == "CRITICAL")] | length' reports/security-audit-*.json)
+          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+            echo "::error::Found $CRITICAL_COUNT critical findings"
+            exit 1
+          fi
+
+      - name: Check High Findings
+        run: |
+          HIGH_COUNT=$(jq '[.findings[] | select(.status == "FAIL" and .severity == "HIGH")] | length' reports/security-audit-*.json)
+          if [ "$HIGH_COUNT" -gt 5 ]; then
+            echo "::warning::Found $HIGH_COUNT high findings (threshold: 5)"
+            exit 1
+          fi
+
+      - name: Verify Compliance Score
+        run: |
+          SCORE=$(jq '.summary.compliance_score' reports/final-report-*.json)
+          if (( $(echo "$SCORE < 80" | bc -l) )); then
+            echo "::warning::Compliance score $SCORE% below threshold 80%"
+            exit 1
+          fi
+
+      - name: Create Summary Comment
+        run: |
+          SCORE=$(jq '.summary.compliance_score' reports/final-report-*.json)
+          echo "-compliance_score:$SCORE%" >> $GITHUB_OUTPUT
+
+      - name: Add Status Badge
+        run: |
+          SCORE=$(jq '.summary.compliance_score' reports/final-report-*.json)
+          echo "compliance_score=$(echo "$SCORE" | cut -d. -f1)%" >> $GITHUB_ENV
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const reports = fs.readdirSync('reports').filter(f => f.endsWith('.html') || f.endsWith('.md'));
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Security Scan Complete\n\n` +
+                `- Status: ${{ env.compliance_score }}\n` +
+                `- Artifacts: ${reports.join(', ')}\n` +
+                `- See attached reports for details.`
+            });
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: terraform-validate
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Security Scanner
+        uses: docker/build-push-action@v4
+        with:
+          context: ./docker
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/security-scanner:latest,${{ secrets.DOCKERHUB_USERNAME }}/security-scanner:${{ github.sha }}
