@@ -155,60 +155,102 @@ def calculate_compliance_scores(findings: List[Dict[str, Any]]) -> Dict[str, Dic
     return scores
 
 
-def generate_report(scores: Dict[str, Dict[str, Any]]) -> str:
-    """Generate a comprehensive compliance report in markdown format."""
-    now = datetime.now(timezone.utc)
-    lines = [
-        f"# AWS Compliance Report",
-        f"**Generated**: {now.strftime('%Y-%m-%d %H:%M:%S UTC')}",
-        f"**Severity Threshold**: {SEVERITY_THRESHOLD}",
-        "",
-        "## Overall Compliance Scores",
-        "",
-        "| CIS Section | Score | Compliant | Non-Compliant | Total |",
-        "|------------|-------|-----------|---------------|-------|",
-    ]
-    total_compliant = sum(s["compliant"] for s in scores.values())
-    total_findings = sum(s["total"] for s in scores.values())
-    overall = round((total_compliant / total_findings * 100), 2) if total_findings > 0 else 100.0
-
+def generate_csv_report(scores: Dict[str, Dict[str, Any]]) -> str:
+    """Generate a CSV string for metrics comparison."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    header = ["Section", "Section Name", "Score (%)", "Compliant", "Non-Compliant", "Total"]
+    writer.writerow(header)
     for sid in sorted(scores.keys()):
         s = scores[sid]
-        if sid in CIS_SECTIONS:
-            lines.append(f"| {sid}. {s['name']} | {s['score']:.1f}% | {s['compliant']} | {s['non_compliant']} | {s['total']} |")
+        writer.writerow([sid, s["name"], s["score"], s["compliant"], s["non_compliant"], s["total"]])
+    return output.getvalue()
 
-    lines.extend([
-        f"| **Overall** | **{overall:.1f}%** | **{total_compliant}** | **{total_findings - total_compliant}** | **{total_findings}** |",
-        "",
-        "## Findings by Severity",
-        "",
-    ])
 
-    sev_counts: Dict[str, int] = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFORMATIONAL": 0}
-    for s in scores.values():
-        for finding in s["findings"]:
-            sev = finding["severity"]
-            sev_counts[sev] = sev_counts.get(sev, 0) + 1
+def upload_to_s3(content: str, key: str, content_type: str = "text/markdown") -> bool:
+    """Upload a report file to S3."""
+    try:
+        S3.put_object(
+            Bucket=REPORT_BUCKET,
+            Key=key,
+            Body=content.encode("utf-8"),
+            ContentType=content_type,
+        )
+        LOGGER.info("Uploaded report to s3://%s/%s", REPORT_BUCKET, key)
+        return True
+    except (ClientError, BotoCoreError) as exc:
+        LOGGER.error("Failed to upload report to S3: %s", exc)
+        return False
 
-    for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFORMATIONAL"]:
-        if sev_counts.get(sev, 0) > 0:
-            lines.append(f"- **{sev}**: {sev_counts[sev]}")
 
-    lines.extend(["", "## Detailed Findings", ""])
-    for sid in sorted(scores.keys()):
-        s = scores[sid]
-        if not s["findings"]:
-            continue
-        section_name = CIS_SECTIONS.get(sid, s["name"])
-        lines.append(f"### Section {sid}: {section_name}")
-        lines.append("")
-        lines.append("| Title | Severity | Resource | Account | Region | Status |")
-        lines.append("|-------|----------|----------|---------|--------|--------|")
-        for finding in s["findings"]:
-            short_resource = finding["resource"].split(":")[-1][:40] if ":" in finding["resource"] else finding["resource"][:40]
-            lines.append(f"| {finding['title'][:50]} | {finding['severity']} | {short_resource} | {finding['account']} | {finding['region']} | {finding['compliance_status']} |")
-        lines.append("")
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """Main Lambda handler triggered on schedule."""
+    LOGGER.info("Compliance report generation started")
+    LOGGER.info("Event: %s", json.dumps(event, default=str))
 
-    return "\n".join(lines)
+    try:
+        findings = fetch_security_hub_findings(SEVERITY_THRESHOLD)
+        scores = calculate_compliance_scores(findings)
+        report_md = generate_report(scores)
+        report_csv = generate_csv_report(scores)
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        md_key = f"compliance_reports/report_{timestamp}.md"
+        csv_key = f"compliance_reports/metrics_{timestamp}.csv"
+        latest_md_key = "compliance_reports/latest_report.md"
+        latest_csv_key = "compliance_reports/latest_metrics.csv"
+
+        md_ok = upload_to_s3(report_md, md_key)
+        csv_ok = upload_to_s3(report_csv, csv_key)
+        upload_to_s3(report_md, latest_md_key)
+        upload_to_s3(report_csv, latest_csv_key)
+
+        total = sum(s["total"] for s in scores.values())
+        non_compliant = sum(s["non_compliant"] for s in scores.values())
+        total_compliant = sum(s["compliant"] for s in scores.values())
+        overall = round((total_compliant / total * 100), 2) if total > 0 else 100.0
+
+        summary = (
+            f"Compliance Report Summary\n"
+            f"========================\n"
+            f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+            f"Overall Compliance: {overall:.1f}%\n"
+            f"Total Findings: {total}\n"
+            f"Compliant: {total_compliant}\n"
+            f"Non-Compliant: {non_compliant}\n"
+            f"Scores by Section:\n"
+        )
+        for sid in sorted(scores.keys()):
+            s = scores[sid]
+            summary += f"  CIS {sid} ({s['name']}): {s['score']:.1f}% ({s['non_compliant']} non-compliant)\n"
+        summary += f"\nReport: s3://{REPORT_BUCKET}/{latest_md_key}"
+
+        _send_sns(subject=f"Compliance: {overall:.1f}%", message=summary)
+        LOGGER.info("Compliance report generation complete: overall=%s", overall)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "overall_score": overall,
+                "total_findings": total,
+                "non_compliant": non_compliant,
+                "report_key": md_key,
+                "csv_key": csv_key,
+                "md_uploaded": md_ok,
+                "csv_uploaded": csv_ok,
+            }),
+        }
+
+    except (ClientError, BotoCoreError) as exc:
+        LOGGER.error("AWS API error: %s", exc, exc_info=True)
+        return {"statusCode": 500, "body": json.dumps({"error": str(exc)})}
+    except Exception as exc:
+        LOGGER.error("Unexpected error: %s", exc, exc_info=True)
+        return {"statusCode": 500, "body": json.dumps({"error": str(exc)})}
+
+
+if __name__ == "__main__":
+    result = lambda_handler({"source": "scheduled"}, None)
+    print(json.dumps(result, indent=2, default=str))
 
 
