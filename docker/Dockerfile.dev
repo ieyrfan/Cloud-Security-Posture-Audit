@@ -1,0 +1,36 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    jq \
+    git \
+    unzip \
+    terraform \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    boto3 \
+    azure-identity \
+    azure-mgmt-resource \
+    azure-mgmt-security \
+    python-terraform \
+    requests \
+    pyyaml \
+    jinja2 \
+    reportlab \
+    matplotlib \
+    numpy \
+    prowler \
+    checkov \
+    pre-commit \
+    tflint
+
+WORKDIR /app
+
+COPY scripts/ ./scripts/
+COPY reports/ ./reports/
+COPY docs/ ./docs/
+
+RUN chmod +x ./scripts/*.py
+
+CMD ["./scripts/security-scan.py", "--mode", "full"]

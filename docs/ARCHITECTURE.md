@@ -1,176 +1,94 @@
-# Architecture Documentation
+﻿# AWS Security Posture Audit - Architecture
 
-## Overview
+## 🏗️ Infrastructure Overview
 
-This repository implements a production-grade cloud security posture management (CSPM) pipeline using Infrastructure as Code (IaC), continuous compliance validation, and automated remediation.
-
-## System Components
+### High-Level Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│ 1. Infrastructure Layer (Terraform)                                  │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐         │
-│  │    AWS       │    │   Azure      │    │   United     │         │
-│  │  Provider    │    │  Provider    │    │  Providers   │         │
-│  └──────────────┘    └──────────────┘    └──────────────┘         │
-│         │                    │                    │                 │
-│  ┌──────┴────────────────────┴────────────────────┴───────┐        │
-│  │                   Shared State Management                │        │
-│  │                    (Terraform Cloud / S3)                │        │
-│  └────────────────────────────────────────────────────────┘        │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────────┐
-│ 2. Security Hardening Layer                                         │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────┐            │
-│  │              Identity & Access Security               │            │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │            │
-│  │  │ IAM Password│  │   MFA       │  │ Root Acc.  │ │            │
-│  │  │  Policy     │  │ Enforcement │  │ Protection  │ │            │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘ │            │
-│  └─────────────────────────────────────────────────────┘            │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────┐            │
-│  │                 Data Protection Security              │            │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │            │
-│  │  │ S3 Encrp.   │  │  EBS Encrp. │  │  KMS Key   │ │            │
-│  │  │  & Access   │  │  & Version  │  │  Mgmt      │ │            │
-│  │  │  Blocking   │  │  Logging    │  │            │ │            │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘ │            │
-│  └─────────────────────────────────────────────────────┘            │
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────┐            │
-│  │                 Monitoring & Detection                │            │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │            │
-│  │  │ CloudTrail  │  │ GuardDuty   │  │  Config     │ │            │
-│  │  │ Logging     │  │ Threat Det. │  │  Rules      │ │            │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘ │            │
-│  │  ┌─────────────┐  ┌─────────────┐                   │            │
-│  │  │ SecurityHub │  │  CloudWatch │                   │            │
-│  │  │ Findings Mgmt│ │  Alarms     │                   │            │
-│  │  └─────────────┘  └─────────────┘                   │            │
-│  └─────────────────────────────────────────────────────┘            │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────────┐
-│ 3. Validation Layer (Docker & CI/CD)                                 │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────────────────────────────────┐                    │
-│  │            Security Scanner Container        │                    │
-│  │  ┌─────────────┐    ┌─────────────────┐     │                    │
-│  │  │   Prowler   │    │   Checkov       │     │                    │
-│  │  │   Scanner   │    │   IaC Scanner   │     │                    │
-│  │  └─────────────┘    └─────────────────┘     │                    │
-│  │         │                     │              │                    │
-│  │  ┌──────┴────────┬────────────┴─────────────┐│                    │
-│  │  │ CIS Benchmark │   Compliance Engine      ││                    │
-│  │  │   Engine      │   (50+ checks)           ││                    │
-│  │  └───────────────┴──────────────────────────┘│                    │
-│  └─────────────────────────────────────────────┘                    │
-│                         │                                           │
-│  ┌────────────────────┴────────────────────┐                       │
-│  │      GitHub Actions Workflow              │                       │
-│  │                                          │                       │
-│  │  1. Terraform Validate          ───────►─┼─► SUCCESS/FAIL        │
-│  │  2. Security Scan               ───────►─┼─► SUCCESS/FAIL        │
-│  │  3. Compliance Check             ───────►─┼─► SUCCESS/FAIL        │
-│  │  4. Remediation                 ───────►─┼─► Approval            │
-│  │  5. Re-scan                     ───────►─┼─► VALIDATION          │
-│  │  6. Report Generation           ───────►─┼─► PUBLISH             │
-│  └───────────────────────────────────────────┘                       │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────────┐
-│ 4. Reporting Layer                                                   │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────────────────────────────────────────────┐             │
-│  │              Report Generation                        │             │
-│  │                                                       │             │
-│  │  • JSON Report    (Machine-readable findings)         │             │
-│  │  • Markdown       (Human-readable summary)            │             │
-│  │  • HTML           (Visual dashboard)                  │             │
-│  │  • Compliance Doc (Audit-ready documentation)         │             │
-│  │  • Executive      (Management summary)                │             │
-│  └─────────────────────────────────────────────────────┘             │
-│                         │                                           │
-│          ┌───────────────┼─────────────────┐                        │
-│          ▼               ▼                 ▼                        │
-│  S3 Bucket     Azure Blob    Slack/Teams   Email                     │
-│  (Long-term)   Storage       Webhook       Alert                     │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
+Internet
+    |
+    v
+[WAF] --> [ALB] --> [Public Subnet]
+                           |
+                    [Private Subnet]
+                    +-------+-------+
+                    |       |       |
+                  [EC2]   [RDS]   [Lambda]
+                    |       |       |
+            [Security Groups] [KMS Encryption]
+                    |       |       |
+            [VPC Flow Logs] [CloudTrail] [CloudWatch]
 ```
 
-## Design Principles
+### Security Services Integration
 
-### 1. Shift-Left Security
-Security checks run early in the development lifecycle, preventing misconfigurations from reaching production.
+| Service | Purpose | CIS Control |
+|---------|---------|-------------|
+| AWS Security Hub | Centralized findings | All |
+| AWS CloudTrail | API activity logging | 2.1-2.4 |
+| AWS Config | Resource compliance | All |
+| GuardDuty | Threat detection | - |
+| Macie | Data discovery | - |
+| VPC Flow Logs | Network logging | 3.9 |
+| AWS KMS | Encryption keys | 4.x, 5.x |
 
-### 2. Defense in Depth
-Multiple layers of security controls:
-- Network: Security groups, NACLs, WAF
-- Identity: IAM, MFA, least privilege
-- Data: Encryption at rest and in transit
-- Monitoring: Continuous logging and alerting
+## 🔐 Security Controls by Layer
 
-### 3. Least Privilege
-Every component has only the permissions necessary:
-- Terraform roles for specific operations
-- IAM policies scoped to required actions
-- Service roles with minimal permissions
+### Layer 1: Identity & Access Management
+- MFA enforcement for all users
+- Password policy (14+ chars, 90-day rotation)
+- Access key rotation (90 days)
+- Least privilege IAM policies
+- Root account monitoring
 
-### 4. Continuous Compliance
-- Automated scans run on every PR and daily
-- Drift detection alerts for configuration changes
-- Automated remediation where possible
-- Audit trail for all changes
+### Layer 2: Network Security
+- VPC with private/public subnets
+- Security groups (default deny)
+- Network ACLs (defense in depth)
+- VPC Flow Logs enabled
+- No public IPs on EC2
 
-### 5. Immutable Infrastructure
-Resources are never modified individually:
-- Infrastructure is defined in code
-- Changes require a new deployment
-- Rollbacks are automated
-- No manual configuration
+### Layer 3: Data Protection
+- Encryption at rest (KMS)
+- Encryption in transit (TLS)
+- S3 Block Public Access
+- RDS encryption enabled
 
-## Data Flow
+### Layer 4: Logging & Monitoring
+- CloudTrail multi-region
+- CloudTrail log validation
+- CloudWatch alarms
+- AWS Config rules (50+)
+- Security Hub monitoring
+
+## 📊 Deployment Topology
+
+### Dev Environment
+```
+Single-AZ, t3.micro, limited resources
+```
+
+### Production Environment
+```
+Multi-AZ, Auto Scaling, WAF, HA
+```
+
+## 🚀 Deployment Pipeline
 
 ```
-Commit → Terraform Plan → Security Scan → Deployment →
-Config Recording → Compliance Check → Alert/Report
+Git Push --> GitHub Actions --> Terraform Plan --> Security Scan
+    --> Pass? --> Terraform Apply --> Post-Deployment Scan
+    --> Fail? --> Report Issue
 ```
 
-## Security Boundaries
+## 📈 Compliance Metrics Collection
 
-| Layer | Boundary | Controls |
-|-------|----------|----------|
-| Network | VPC with private subnets, NACLs, SGs | Firewall, WAF, DDoS protection |
-| Identity | IAM users, roles, policies | MFA, least privilege, SSO |
-| Data | S3 buckets, EBS volumes, RDS | Encryption, access control, versioning |
-| Monitoring | CloudWatch, Config, SecurityHub | Alerting, anomaly detection, auditing |
-
-## Scalability Considerations
-
-- Modular Terraform for reuse across environments
-- Containerized security tools for consistent scanning
-- Cloud-native services for auto-scaling
-- Regional deployment for low latency
-
-## Disaster Recovery
-
-- Cross-region replication for critical data
-- Encrypted backups with versioning
-- Infrastructure recovery via Terraform
-- State file backup and locking
+```
+AWS Config --> Lambda --> S3 Reports
+    |                       |
+    v                       v
+Security Hub --> Compliance Dashboard
+```
 
 ---
-
-For deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+*Architecture Version: 2.0.0 | July 2026*

@@ -1,6 +1,9 @@
-node_modules/
-vendor/
-__pycache__/
+# Dependencies
+/node_modules/
+/vendor/
+
+# Python
+/__pycache__/
 *.pyc
 .pytest_cache/
 .coverage
@@ -9,30 +12,18 @@ htmlcov/
 *.log
 
 # Terraform
-.terraform/
-.terraform.lock.hcl
+/.terraform/
+/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
 *.tfplan
 crash.log
-.DS_Store
-
-# AWS
-.aws/
-azure/
 
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Secrets
-*.pem
-*.key
-credential*
-!requirements.txt
-secrets.env
 
 # IDE
 .vscode/
@@ -41,12 +32,17 @@ secrets.env
 *.swo
 *~
 
-# Docker
-docker-compose.override.yml
+# Secrets
+*.pem
+*.key
+*.env
+secrets.env
+aws_credentials.txt
+!requirements.txt
 
-# Reports generated (keep structure)
-!reports/.gitkeep
-!terraform/modules/.gitkeep
-!docker/.gitkeep
-!scripts/.gitkeep
-!docs/.gitkeep
+# Reports (generated - keep structure)
+!/reports/.gitkeep
+!/terraform/modules/.gitkeep
+!/docker/.gitkeep
+!/scripts/.gitkeep
+!/docs/.gitkeep
