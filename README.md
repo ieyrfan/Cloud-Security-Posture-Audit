@@ -41,7 +41,7 @@ graph LR
 
 ### Deploy Infrastructure
 ```bash
-git clone https://github.com/<your-username>/cloud-security-posture-audit.git
+git clone https://github.com/ieyrfan/cloud-security-posture-audit.git
 cd cloud-security-posture-audit
 
 # Initialize Terraform
