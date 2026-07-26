@@ -50,12 +50,28 @@ desktop.ini
 # Secrets
 *.pem
 *.key
+*.p12
+*.pfx
 *.env
+*.env.*
 secrets.env
 aws_credentials.txt
-!requirements.txt
+cloud-credentials
+*.secret
+*.credentials
+credentials.json
+service-account.json
+application_default_credentials.json
 
-# Reports (generated - keep structure)
+# Terraform secrets
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Report generated outputs (keep structure)
 !/reports/.gitkeep
 !/terraform/modules/.gitkeep
 !/docker/.gitkeep

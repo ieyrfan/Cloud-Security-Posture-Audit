@@ -257,10 +257,10 @@ aws s3api get-bucket-encryption --bucket prod-customer-data-2024
 aws iam list-access-keys --user-name root
 
 # Deactivate the key first
-iam update-access-key --user-name root --access-key-id AKIAIOSFODNN7EXAMPLE --status Inactive
+iam update-access-key --user-name root --access-key-id <AWS_ACCESS_KEY_ID> --status Inactive
 
 # After validation, delete the key
-aws iam delete-access-key --user-name root --access-key-id AKIAIOSFODNN7EXAMPLE
+aws iam delete-access-key --user-name root --access-key-id <AWS_ACCESS_KEY_ID>
 
 # Enable MFA on root account
 aws iam create-virtual-mfa-device --virtual-mfa-device-name root-mfa --outfile QRCode.png --bootstrap-method QRCodePNG
@@ -575,13 +575,13 @@ aws iam create-access-key --user-name devops-john
 # Output includes new AccessKeyId and SecretAccessKey
 
 # Step 2: Update applications with new key (manual coordination)
-# echo "AKIAIOSFODNN7EXAMPLE_NEW" | aws secretsmanager put-secret-value --secret-id devops-john-key --secret-string file://-
+# echo "<AWS_ACCESS_KEY_ID>_NEW" | aws secretsmanager put-secret-value --secret-id devops-john-key --secret-string file://-
 
 # Step 3: Deactivate old key
-aws iam update-access-key --user-name devops-john --access-key-id AKIAIOSFODNN7EXAMPLE --status Inactive
+aws iam update-access-key --user-name devops-john --access-key-id <AWS_ACCESS_KEY_ID> --status Inactive
 
 # Step 4: After 7 days, delete old key
-aws iam delete-access-key --user-name devops-john --access-key-id AKIAIOSFODNN7EXAMPLE
+aws iam delete-access-key --user-name devops-john --access-key-id <AWS_ACCESS_KEY_ID>
 ```
 
 ---
