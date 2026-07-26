@@ -18,7 +18,22 @@ htmlcov/
 *.tfstate.*
 *.tfvars
 *.tfplan
+*.tfplan.json
+terraform.tfvars
 crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Lambda
+lambda/*.zip
+lambda/slack_alert.zip
+
+# Dashboard
+dashboard/.streamlit/
+__pycache__/
+*.pyc
 
 # OS
 .DS_Store

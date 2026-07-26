@@ -1,0 +1,26 @@
+﻿{
+  "ConfigRuleName": "s3-bucket-public-read-prohibited",
+  "Description": "Checks that S3 buckets do not allow public read access. If an S3 bucket policy or ACL allows public read access, the rule is NON_COMPLIANT.",
+  "Scope": {
+    "ComplianceResourceTypes": [
+      "AWS::S3::Bucket"
+    ]
+  },
+  "Source": {
+    "Owner": "AWS",
+    "SourceIdentifier": "S3_BUCKET_PUBLIC_READ_PROHIBITED"
+  },
+  "InputParameters": {},
+  "ConfigRuleState": "ACTIVE",
+  "MaximumExecutionFrequency": "TwentyFour_Hours",
+  "Tags": [
+    {
+      "Key": "Compliance",
+      "Value": "CIS-2.8"
+    },
+    {
+      "Key": "ManagedBy",
+      "Value": "aws-config"
+    }
+  ]
+}

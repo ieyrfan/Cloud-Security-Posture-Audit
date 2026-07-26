@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
+    }
   }
 
   backend "s3" {
@@ -53,11 +57,13 @@ module "aws_security" {
 
   environment      = var.environment
   allowed_ips      = var.allowed_ips
-  mfa_enabled      = true
-将所有密码策略
   min_password_length     = 14
   password_reuse_prevention = 12
   max_password_age        = 90
+  require_symbols        = true
+  require_numbers        = true
+  require_uppercase      = true
+  require_lowercase      = true
 }
 
 # Compliance Module - CIS Controls
@@ -483,6 +489,17 @@ resource "aws_sns_topic_subscription" "security_alerts_email" {
   topic_arn = aws_sns_topic.security_alerts.arn
   protocol  = "email"
   endpoint  = var.alert_email
+}
+
+# Slack Alerting Module (Optional - requires SLACK_WEBHOOK_URL)
+module "slack_security_alerts" {
+  source = "./modules/alerting/slack"
+
+  count               = var.slack_webhook_url != "" ? 1 : 0
+  environment         = var.environment
+  slack_webhook_url   = var.slack_webhook_url
+  slack_channel       = "#security-alerts"
+  alert_on_severity   = ["CRITICAL", "HIGH"]
 }
 
 # Outputs

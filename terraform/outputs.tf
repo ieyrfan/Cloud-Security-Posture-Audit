@@ -41,3 +41,18 @@ output "cis_findings_count" {
     high      = aws_securityhub_insight.high_findings.filter_count
   }
 }
+
+output "slack_alerts_enabled" {
+  description = "Whether Slack alerting is enabled"
+  value       = try(module.slack_security_alerts[0].slack_integration_status, "not_configured")
+}
+
+output "slack_lambda_function_name" {
+  description = "Name of the Slack alert Lambda function"
+  value       = try(module.slack_security_alerts[0].lambda_function_name, "none")
+}
+
+output "slack_event_rule_arn" {
+  description = "ARN of the EventBridge rule for Slack alerts"
+  value       = try(module.slack_security_alerts[0].event_rule_arn, "none")
+}

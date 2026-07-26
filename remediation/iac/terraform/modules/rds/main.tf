@@ -245,3 +245,101 @@ resource "aws_db_instance" "this" {
     }
   )
 }
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# IAM Role for Enhanced Monitoring
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_iam_role" "enhanced_monitoring" {
+  count = var.monitoring_interval > 0 && var.monitoring_role_arn == null ? 1 : 0
+
+  name = format("%s-rds-monitoring-role", var.environment)
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "monitoring.rds.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  managed_policy_arns = [
+    format("arn:%s:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole", data.aws_partition.current.partition)
+  ]
+
+  tags = local.common_tags
+}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# CloudWatch Metric Alarm for RDS
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  count = var.create_alarms ? 1 : 0
+
+  alarm_name          = format("%s-rds-cpu-high", local.db_identifier)
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "80"
+  alarm_description   = format("RDS CPU utilization > 80%% for %s", local.db_identifier)
+  alarm_actions       = var.alarm_sns_topics
+  ok_actions          = var.alarm_sns_topics
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.id
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "connections_high" {
+  count = var.create_alarms ? 1 : 0
+
+  alarm_name          = format("%s-rds-connections-high", local.db_identifier)
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "DatabaseConnections"
+  namespace           = "AWS/RDS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = var.max_connections_threshold
+  alarm_description   = format("RDS connections > %d for %s", var.max_connections_threshold, local.db_identifier)
+  alarm_actions       = var.alarm_sns_topics
+  ok_actions          = var.alarm_sns_topics
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.id
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "disk_queue_depth" {
+  count = var.create_alarms ? 1 : 0
+
+  alarm_name          = format("%s-rds-disk-queue", local.db_identifier)
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "DiskQueueDepth"
+  namespace           = "AWS/RDS"
+  period              = "300"
+  statistic           = "Average"
+  threshold           = "64"
+  alarm_description   = format("RDS disk queue depth > 64 for %s", local.db_identifier)
+  alarm_actions       = var.alarm_sns_topics
+  ok_actions          = var.alarm_sns_topics
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.this.id
+  }
+
+  tags = local.common_tags
+}

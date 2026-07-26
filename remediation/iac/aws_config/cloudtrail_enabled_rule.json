@@ -1,0 +1,35 @@
+﻿{
+  "ConfigRuleName": "cloud-trail-enabled",
+  "Description": "Checks that AWS CloudTrail is enabled in the AWS account. Optionally checks if the trail has specific configuration such as multi-region, log file validation, and encryption.",
+  "Scope": {
+    "ComplianceResourceTypes": []
+  },
+  "Source": {
+    "Owner": "AWS",
+    "SourceIdentifier": "CLOUD_TRAIL_ENABLED"
+  },
+  "InputParameters": {
+    "s3BucketName": "REPLACE_WITH_YOUR_CLOUDTRAIL_BUCKET",
+    "includeManagementEvents": "true",
+    "readWriteType": "All",
+    "isLogging": "true",
+    "isMultiRegionTrail": "true",
+    "logFileValidationEnabled": "true"
+  },
+  "ConfigRuleState": "ACTIVE",
+  "MaximumExecutionFrequency": "TwentyFour_Hours",
+  "Tags": [
+    {
+      "Key": "Compliance",
+      "Value": "CIS-2.1"
+    },
+    {
+      "Key": "ManagedBy",
+      "Value": "aws-config"
+    },
+    {
+      "Key": "Severity",
+      "Value": "Critical"
+    }
+  ]
+}

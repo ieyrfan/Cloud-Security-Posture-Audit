@@ -1,0 +1,30 @@
+﻿{
+  "ConfigRuleName": "rds-storage-encrypted",
+  "Description": "Checks whether storage encryption is enabled for Amazon RDS DB instances. The rule is NON_COMPLIANT if the DB instance does not have storage encryption enabled.",
+  "Scope": {
+    "ComplianceResourceTypes": [
+      "AWS::RDS::DBInstance"
+    ]
+  },
+  "Source": {
+    "Owner": "AWS",
+    "SourceIdentifier": "RDS_STORAGE_ENCRYPTED"
+  },
+  "InputParameters": {},
+  "ConfigRuleState": "ACTIVE",
+  "MaximumExecutionFrequency": "TwentyFour_Hours",
+  "Tags": [
+    {
+      "Key": "Compliance",
+      "Value": "CIS-2.5"
+    },
+    {
+      "Key": "ManagedBy",
+      "Value": "aws-config"
+    },
+    {
+      "Key": "Severity",
+      "Value": "High"
+    }
+  ]
+}

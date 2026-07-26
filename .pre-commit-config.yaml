@@ -23,3 +23,31 @@ repos:
     args:
     - --args=--quiet
     - --args=--skip-path=modules/prod
+
+- repo: local
+  hooks:
+  - id: opa-policies
+    name: OPA Security Policies
+    entry: bash -c 'for f in $(git diff --cached --name-only --diff-filter=ACM | grep -E "\.tf$"); do opa eval -f pretty -i $f -d .opa/terraform_security.rego "data.terraform.security.deny" || exit 1; done'
+    language: system
+    files: '\.tf$'
+    pass_filenames: []
+    stages: [commit]
+    verbose: true
+
+- repo: local
+  hooks:
+  - id: python-lint
+    name: Python Lint
+    entry: python -m py_compile
+    language: system
+    files: '\.py$'
+    pass_filenames: []
+
+- repo: https://github.com/PyCQA/flake8
+  rev: 6.1.0
+  hooks:
+  - id: flake8
+    args: ['--max-line-length=120', '--ignore=E501,W503']
+    files: '\.py$'
+    exclude: 'dashboard/.*|scripts/__pycache__/.*'

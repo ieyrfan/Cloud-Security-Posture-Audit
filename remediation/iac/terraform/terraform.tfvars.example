@@ -1,0 +1,58 @@
+﻿# ===================================================================================
+# Terraform Variable Values - Example Configuration
+# ===================================================================================
+# Copy this file to terraform.tfvars and update values for your environment.
+# ===================================================================================
+
+# -----------------------------------------------------------------------------------
+# Global Settings
+# -----------------------------------------------------------------------------------
+aws_region  = "us-east-1"
+environment = "prod"
+
+# -----------------------------------------------------------------------------------
+# VPC Configuration (vpc module)
+# -----------------------------------------------------------------------------------
+vpc_cidr              = "10.0.0.0/16"
+availability_zones    = ["us-east-1a", "us-east-1b"]
+single_nat_gateway    = false
+
+# -----------------------------------------------------------------------------------
+# S3 Configuration (s3 module)
+# -----------------------------------------------------------------------------------
+bucket_suffix = "application-data"
+
+# -----------------------------------------------------------------------------------
+# RDS Configuration (rds module)
+# -----------------------------------------------------------------------------------
+engine         = "postgres"
+engine_version = "15.4"
+instance_class = "db.r6g.large"
+db_name        = "appdb"
+master_username = "app_admin"
+# master_password is auto-generated if not specified
+# master_password = "YourSecurePassword!"
+multi_az       = true
+vpc_id         = "MODULE.vpc_id"
+subnet_ids     = ["MODULE.vpc_private_subnet_ids"]
+
+# -----------------------------------------------------------------------------------
+# IAM Configuration (iam module)
+# -----------------------------------------------------------------------------------
+support_principal_arns = [
+  "arn:aws:iam::123456789012:user/admin"
+]
+
+# -----------------------------------------------------------------------------------
+# Logging Configuration (logging module)
+# -----------------------------------------------------------------------------------
+alert_email = "security-team@example.com"
+
+# -----------------------------------------------------------------------------------
+# Tags
+# -----------------------------------------------------------------------------------
+tags = {
+  Project     = "CloudSecurityPostureAudit"
+  Owner       = "SecurityTeam"
+  CostCenter  = "IT-Security"
+}

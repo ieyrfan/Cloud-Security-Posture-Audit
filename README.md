@@ -164,9 +164,17 @@ python scripts/generate-report.py --environment prod
 | Storage | 25% | 90% | +65% |
 | **Overall** | **42%** | **87%** | **+107%** |
 
+### Upgrades Added
+| Upgrade | Description |
+|---------|-------------|
+| 🎛️ Interactive Dashboard | Streamlit web UI with metrics, findings explorer, and remediation tracker |
+| 🏷️ Dynamic Badge | GitHub Action auto-updates compliance badge on push |
+| 🛡️ Pre-Commit Gate | OPA + Checkov policies enforce security before deployment |
+| 🔔 Slack Alerting | Lambda + EventBridge sends real-time alerts for CRITICAL/HIGH findings |
+
 ## Resume Keywords
 
-`Cloud Security`, `CIS Benchmarks`, `Infrastructure as Code`, `Security Posture Management`, `Compliance Automation`, `Terraform`, `DevSecOps`, `Risk Assessment`, `AWS Security`, `Prowler`, `Security Hub`, `AWS Config`, `GuardDuty`, `Automated Remediation`, `Audit Documentation`
+`Cloud Security`, `CIS Benchmarks`, `Infrastructure as Code`, `Security Posture Management`, `Compliance Automation`, `Terraform`, `DevSecOps`, `Risk Assessment`, `AWS Security`, `Prowler`, `Security Hub`, `AWS Config`, `GuardDuty`, `Automated Remediation`, `Audit Documentation`, `Streamlit`, `OPA`, `Slack Alerts`, `EventBridge`, `Pre-Commit Security Gate`
 
 ## License
 

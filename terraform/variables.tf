@@ -67,3 +67,10 @@ variable "scan_schedule" {
   type        = string
   default     = "cron(0 2 * * ? *)"  # Daily at 2 AM UTC
 }
+
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for security alerts (optional)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

@@ -1,4 +1,4 @@
-# ----------------------------------------------------------------------------------------------------------------------
+﻿# ----------------------------------------------------------------------------------------------------------------------
 # VPC Module - Production-grade VPC with security best practices
 # ----------------------------------------------------------------------------------------------------------------------
 # Creates a VPC with public/private subnets across 2 AZs, NAT Gateway, VPC Flow Logs,
@@ -51,6 +51,128 @@ resource "aws_vpc" "this" {
       Name = local.vpc_name
     }
   )
+}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Public subnets
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_subnet" "public" {
+  count = length(var.availability_zones)
+
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index)
+  availability_zone       = var.availability_zones[count.index]
+  map_public_ip_on_launch = true
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name                                          = local.public_subnet_names[count.index]
+      Tier                                          = "public"
+      "kubernetes.io/role/elb"                      = "1"
+      "kubernetes.io/cluster/\"    = "shared"
+    }
+  )
+}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Private subnets
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_subnet" "private" {
+  count = length(var.availability_zones)
+
+  vpc_id                  = aws_vpc.this.id
+  cidr_block              = cidrsubnet(var.vpc_cidr, 8, count.index + length(var.availability_zones))
+  availability_zone       = var.availability_zones[count.index]
+  map_public_ip_on_launch = false
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name                                          = local.private_subnet_names[count.index]
+      Tier                                          = "private"
+      "kubernetes.io/role/internal-elb"             = "1"
+      "kubernetes.io/cluster/\"    = "shared"
+    }
+  )
+}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Internet Gateway
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_internet_gateway" "this" {
+  vpc_id = aws_vpc.this.id
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = format("%s-igw", var.environment)
+    }
+  )
+}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Elastic IP for NAT Gateway(s)
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_eip" "nat" {
+  count = var.single_nat_gateway ? 1 : length(var.availability_zones)
+
+  domain = "vpc"
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = format("%s-nat-eip-%d", var.environment, count.index + 1)
+    }
+  )
+}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# NAT Gateway(s) - one per AZ, or single for cost savings
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_nat_gateway" "this" {
+  count = var.single_nat_gateway ? 1 : length(var.availability_zones)
+
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = var.single_nat_gateway
+        ? format("%s-nat", var.environment)
+        : format("%s-nat-%s", var.environment, var.availability_zones[count.index])
+    }
+  )
+
+  depends_on = [aws_internet_gateway.this]
+}
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Public route table (routes traffic to IGW)
+# ----------------------------------------------------------------------------------------------------------------------
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.this.id
+
+  tags = merge(
+    local.common_tags,
+    {
+      Name = format("%s-public-rt", var.environment)
+    }
+  )
+}
+
+resource "aws_route" "public_internet_gateway" {
+  route_table_id         = aws_route_table.public.id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.this.id
+}
+
+resource "aws_route_table_association" "public" {
+  count = length(var.availability_zones)
+
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
 }
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -176,20 +298,20 @@ resource "aws_default_security_group" "this" {
 
   # Deny all ingress
   ingress {
-    from_port  = 0
-    to_port    = 0
-    protocol   = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = []
-    self       = false
+    self        = false
   }
 
   # Deny all egress
   egress {
-    from_port  = 0
-    to_port    = 0
-    protocol   = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = []
-    self       = false
+    self        = false
   }
 
   tags = merge(
@@ -201,21 +323,13 @@ resource "aws_default_security_group" "this" {
 }
 
 # ----------------------------------------------------------------------------------------------------------------------
-# VPC DHCP Options Set - Use default
-# ----------------------------------------------------------------------------------------------------------------------
-resource "aws_vpc_dhcp_options_association" "this" {
-  vpc_id          = aws_vpc.this.id
-  dhcp_options_id = var.dhcp_options_id != null ? var.dhcp_options_id : aws_vpc.this.default_network_acl_id
-}
-
-# ----------------------------------------------------------------------------------------------------------------------
 # VPC Endpoints for S3 and DynamoDB (Gateway endpoints)
 # ----------------------------------------------------------------------------------------------------------------------
 resource "aws_vpc_endpoint" "s3" {
   count = var.enable_s3_endpoint ? 1 : 0
 
-  vpc_id       = aws_vpc.this.id
-  service_name = format("com.amazonaws.%s.s3", var.aws_region)
+  vpc_id            = aws_vpc.this.id
+  service_name      = format("com.amazonaws.%s.s3", var.aws_region)
   vpc_endpoint_type = "Gateway"
 
   route_table_ids = concat(
@@ -234,8 +348,8 @@ resource "aws_vpc_endpoint" "s3" {
 resource "aws_vpc_endpoint" "dynamodb" {
   count = var.enable_dynamodb_endpoint ? 1 : 0
 
-  vpc_id       = aws_vpc.this.id
-  service_name = format("com.amazonaws.%s.dynamodb", var.aws_region)
+  vpc_id            = aws_vpc.this.id
+  service_name      = format("com.amazonaws.%s.dynamodb", var.aws_region)
   vpc_endpoint_type = "Gateway"
 
   route_table_ids = concat(

@@ -63,6 +63,41 @@ services:
     networks:
       - security-network
 
+  security-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: security-dashboard
+    volumes:
+      - ./reports:/app/reports
+      - ./dashboard:/app/dashboard
+      - ~/.aws:/root/.aws
+    ports:
+      - "8501:8501"
+    environment:
+      - AWS_REGION=us-east-1
+      - SCAN_OUTPUT_DIR=/app/reports
+    command: >
+      sh -c "
+        pip install streamlit plotly pandas
+        cd /app
+        streamlit run dashboard/app.py --server.port=8501 --server.headless=true --browser.gatherUsageStats=false
+      "
+    networks:
+      - security-network
+
+  chart-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chart-generator
+    volumes:
+      - ./reports:/app/reports
+      - ./assets:/app/assets
+    command: python scripts/generate-metrics.py --output /app/assets/charts
+    networks:
+      - security-network
+
 networks:
   security-network:
     driver: bridge

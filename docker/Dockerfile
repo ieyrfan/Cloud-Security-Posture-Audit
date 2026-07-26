@@ -23,13 +23,19 @@ RUN pip install --no-cache-dir \
     jinja2 \
     reportlab \
     matplotlib \
-    numpy
+    numpy \
+    pandas \
+    plotly
 
 # Install prowler CLI
 RUN pip install --no-cache-dir prowler
 
 # Install Checkov for IaC scanning
 RUN pip install --no-cache-dir checkov
+
+# Install OPA for policy enforcement
+RUN curl -L -o /usr/local/bin/opa https://github.com/open-policy-agent/opa/releases/latest/download/opa_linux_amd64 && \
+    chmod +x /usr/local/bin/opa
 
 # Create app directory
 WORKDIR /app
@@ -38,6 +44,7 @@ WORKDIR /app
 COPY scripts/ ./scripts/
 COPY reports/ ./reports/
 COPY docs/ ./docs/
+COPY dashboard/ ./dashboard/
 
 # Set executable permissions
 RUN chmod +x ./scripts/*.py
