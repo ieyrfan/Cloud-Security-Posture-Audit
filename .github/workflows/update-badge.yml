@@ -13,11 +13,13 @@ jobs:
     name: Update README Badge
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
+    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -32,7 +34,6 @@ jobs:
       - name: Get Latest Scan Results
         id: get-results
         run: |
-          # Find latest security audit report
           LATEST_REPORT=$(find reports -name "security-audit-*.json" -type f | sort -r | head -n 1)
           if [ -z "$LATEST_REPORT" ]; then
             echo "No scan reports found, using sample data"
@@ -64,16 +65,12 @@ jobs:
         run: |
           SCORE=${{ steps.get-results.outputs.score }}
           COLOR=${{ steps.badge-color.outputs.color }}
-
-          # Create badge markdown
           BADGE="![Compliance Score](https://img.shields.io/badge/CIS_Compliance-${SCORE}%25-${COLOR})"
 
-          # Update README.md - replace existing badge or add new one
           if grep -q '!\[Compliance Score\]' README.md; then
             sed -i "s|!\[Compliance Score\](https://img.shields.io/badge/CIS_Compliance-[^)]*)|${BADGE}|g" README.md
             echo "Updated existing compliance badge"
           else
-            # Add badge after title
             sed -i "2i ${BADGE}" README.md
             echo "Added new compliance badge"
           fi
@@ -91,8 +88,12 @@ jobs:
           git config --local user.email "security-audit@example.com"
           git config --local user.name "Security Audit Bot"
           git add README.md BADGE.md
-          git diff --cached --quiet || git commit -m "docs: update compliance badge to ${{ steps.get-results.outputs.score }}%"
-          git push
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "docs: update compliance badge to ${{ steps.get-results.outputs.score }}% [skip ci]"
+            git push
+          fi
 
       - name: Create GitHub Release Badge
         run: |

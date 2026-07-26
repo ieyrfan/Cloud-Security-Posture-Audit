@@ -43,7 +43,7 @@ deny[msg] {
 }
 
 # Deny security groups allowing SSH from 0.0.0.0/0
-denry[msg] {
+deny[msg] {
   resource := input.resource_changes[_]
   resource.type == "aws_security_group"
   resource.change.after.ingress[_].cidr_blocks[_] == "0.0.0.0/0"
